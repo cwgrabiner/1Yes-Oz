@@ -1,8 +1,8 @@
 'use client';
 
+import React, { useState } from 'react';
 import { getAllTools } from '@/lib/tools/definitions';
 import * as Icons from 'lucide-react';
-import { useState } from 'react';
 
 export function ToolsSidebar({ 
   onToolSelect 
@@ -34,7 +34,7 @@ export function ToolsSidebar({
           {expandedCategory === category && (
             <div className="space-y-1">
               {categoryTools.map(tool => {
-                const Icon = Icons[tool.icon as keyof typeof Icons];
+                const Icon = (Icons[tool.icon as keyof typeof Icons] as React.ComponentType<{ className?: string }>) || null;
                 
                 return (
                   <button
