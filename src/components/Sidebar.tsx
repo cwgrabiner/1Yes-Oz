@@ -140,7 +140,7 @@ export default function Sidebar({ isOpen, onClose, slots, onSlotsChange, onToolL
                   {isExpanded && (
                     <div className="space-y-1 pl-6">
                       {categoryTools.map(tool => {
-                        const Icon = Icons[tool.icon as keyof typeof Icons];
+                        const Icon = (Icons[tool.icon as keyof typeof Icons] as React.ComponentType<{ className?: string }>) || null;
                         const isActive = activeToolName === tool.toolName;
                         
                         return (
