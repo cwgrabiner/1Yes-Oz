@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getAllTools } from '@/lib/tools/definitions';
@@ -120,7 +120,7 @@ export default function Sidebar({ isOpen, onClose, slots, onSlotsChange, onToolL
               const categoryTools = toolsByCategory[category] || [];
               const isExpanded = expandedCategories.has(category);
               const IconName = CATEGORY_ICONS[category];
-              const CategoryIcon = IconName ? Icons[IconName] : null;
+              const CategoryIcon = IconName ? (Icons[IconName] as React.ComponentType<{ className?: string }>) : null;
               
               return (
                 <div key={category} className="mb-3">
