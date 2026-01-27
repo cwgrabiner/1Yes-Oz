@@ -119,7 +119,8 @@ export default function Sidebar({ isOpen, onClose, slots, onSlotsChange, onToolL
             {(['Job Search', 'Personal Brand', 'Career Growth'] as const).map((category) => {
               const categoryTools = toolsByCategory[category] || [];
               const isExpanded = expandedCategories.has(category);
-              const CategoryIcon = Icons[CATEGORY_ICONS[category]];
+              const IconName = CATEGORY_ICONS[category];
+              const CategoryIcon = IconName ? Icons[IconName] : null;
               
               return (
                 <div key={category} className="mb-3">
