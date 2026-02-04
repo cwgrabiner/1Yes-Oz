@@ -10,9 +10,10 @@ interface MessageListProps {
   isLoading: boolean;
   onRememberMemory?: (candidate: { key: string; value: string }) => Promise<void>;
   onToolLaunch?: (toolName: string) => void;
+  onEntryPromptSelect?: (text: string) => void;
 }
 
-export default function MessageList({ messages, isLoading, onRememberMemory, onToolLaunch }: MessageListProps) {
+export default function MessageList({ messages, isLoading, onRememberMemory, onToolLaunch, onEntryPromptSelect }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Derive active tool from most recent message with toolResult
@@ -64,8 +65,10 @@ export default function MessageList({ messages, isLoading, onRememberMemory, onT
             message={message}
             messageIndex={index}
             messageCount={messages.length}
+            isLoading={isLoading}
             onRememberMemory={onRememberMemory}
             onToolLaunch={onToolLaunch}
+            onEntryPromptSelect={onEntryPromptSelect}
           />
         ))}
         {isLoading && (

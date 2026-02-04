@@ -9,14 +9,34 @@ interface MessageItemProps {
   message: Message;
   messageIndex: number;
   messageCount: number;
+  isLoading?: boolean;
   onRememberMemory?: (candidate: { key: string; value: string }) => Promise<void>;
   onToolLaunch?: (toolName: string) => void;
+  onEntryPromptSelect?: (text: string) => void;
 }
 
-export default function MessageItem({ message, messageIndex, messageCount, onRememberMemory, onToolLaunch }: MessageItemProps) {
+export default function MessageItem({ message, messageIndex, messageCount, isLoading = false, onRememberMemory, onToolLaunch, onEntryPromptSelect }: MessageItemProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const [dismissedCandidates, setDismissedCandidates] = useState<Set<string>>(new Set());
+  const [jobSearchLayer1Selected, setJobSearchLayer1Selected] = useState<string | null>(null);
+  const [entryLayer2Selected, setEntryLayer2Selected] = useState<string | null>(null);
+  const [jobSearchEntryDismissed, setJobSearchEntryDismissed] = useState(false);
+
+  const isLastMessage = messageIndex === messageCount - 1;
+  const toolName = message.toolResult?.toolName;
+  const hasEntryPrompts = (toolName === 'jobseeker_operations' || toolName === 'interview_prep' || toolName === 'linkedin_presence' || toolName === 'resumes' || toolName === 'confidence_builder' || toolName === 'negotiations' || toolName === 'networking') && message.toolResult?.entryPrompts;
+  const entryPrompts = isAssistant && hasEntryPrompts ? message.toolResult!.entryPrompts! : null;
+  const showEntryGuidance =
+    entryPrompts &&
+    isLastMessage &&
+    !isLoading &&
+    !jobSearchEntryDismissed &&
+    !!onEntryPromptSelect;
+  const layer2Prefix = toolName === 'jobseeker_operations' ? ' Base it on: ' : ' Start from: ';
+  const hasLayer3 = entryPrompts && 'layer3' in entryPrompts && entryPrompts.layer3;
+  const showingLayer3 = hasLayer3 && jobSearchLayer1Selected && entryLayer2Selected;
+  const showingLayer2 = jobSearchLayer1Selected && !showingLayer3;
 
   // Render system messages (e.g., "Saved: {value}") but with muted styling
   if (message.role === 'system') {
@@ -86,6 +106,70 @@ export default function MessageItem({ message, messageIndex, messageCount, onRem
                 onDismiss={() => handleDismiss({ key: write.key, value: write.value })}
               />
             ))}
+          </div>
+        )}
+        {/* Guided entry for Job Search, Interview Prep, LinkedIn, Confidence Builder, Salary Negotiation, Networking (2 layers) & Resume Makeover (3 layers). Disappears on selection or when user types. */}
+        {showEntryGuidance && entryPrompts && (
+          <div className="mt-4 flex flex-col gap-3">
+            {!jobSearchLayer1Selected ? (
+              <>
+                <p className="text-xs font-medium text-zinc-400">{entryPrompts.layer1.intro}</p>
+                <div className="flex flex-col gap-2">
+                  {entryPrompts.layer1.options.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setJobSearchLayer1Selected(opt)}
+                      className="w-full max-w-md rounded-xl border border-[#16a34a]/30 bg-[#0a0a0a] px-4 py-2.5 text-left text-sm text-zinc-300 transition-all hover:border-[#16a34a]/80 hover:text-white hover:shadow-[0_0_12px_rgba(22,163,74,0.25)] focus:outline-none focus:border-[#16a34a] focus:shadow-[0_0_16px_rgba(22,163,74,0.3)]"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : showingLayer3 && entryPrompts.layer3 ? (
+              <>
+                <p className="text-xs font-medium text-zinc-400">{entryPrompts.layer3.intro}</p>
+                <div className="flex flex-col gap-2">
+                  {entryPrompts.layer3.options.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setJobSearchEntryDismissed(true);
+                        onEntryPromptSelect?.(`${jobSearchLayer1Selected}.${layer2Prefix}${entryLayer2Selected}. Approach: ${opt}`);
+                      }}
+                      className="w-full max-w-md rounded-xl border border-[#16a34a]/30 bg-[#0a0a0a] px-4 py-2.5 text-left text-sm text-zinc-300 transition-all hover:border-[#16a34a]/80 hover:text-white hover:shadow-[0_0_12px_rgba(22,163,74,0.25)] focus:outline-none focus:border-[#16a34a] focus:shadow-[0_0_16px_rgba(22,163,74,0.3)]"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : showingLayer2 ? (
+              <>
+                <p className="text-xs font-medium text-zinc-400">{entryPrompts.layer2.intro}</p>
+                <div className="flex flex-col gap-2">
+                  {entryPrompts.layer2.options.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        if (hasLayer3) {
+                          setEntryLayer2Selected(opt);
+                        } else {
+                          setJobSearchEntryDismissed(true);
+                          onEntryPromptSelect?.(`${jobSearchLayer1Selected}.${layer2Prefix}${opt}`);
+                        }
+                      }}
+                      className="w-full max-w-md rounded-xl border border-[#16a34a]/30 bg-[#0a0a0a] px-4 py-2.5 text-left text-sm text-zinc-300 transition-all hover:border-[#16a34a]/80 hover:text-white hover:shadow-[0_0_12px_rgba(22,163,74,0.25)] focus:outline-none focus:border-[#16a34a] focus:shadow-[0_0_16px_rgba(22,163,74,0.3)]"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
       </div>

@@ -7,6 +7,7 @@ import type { ToolResult } from '@/lib/tools/types';
 import { appendMessage, normalizeMessages } from '@/lib/chat/history';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
+import HomeStarterChips from './HomeStarterChips';
 import ErrorBanner from './ErrorBanner';
 import ContextIndicator from './ContextIndicator';
 
@@ -16,11 +17,31 @@ interface ChatContainerProps {
   onToolLaunchRef?: (handler: (toolName: string) => void) => void;
 }
 
+// Map chip toolName (homeChips) to actual tool name (definitions/registry)
+const CHIP_TOOL_NAME_MAP: Record<string, string> = {
+  resume: 'resumes',
+  interview: 'interview_prep',
+  linkedin: 'linkedin_presence',
+  salary: 'negotiations',
+  confidence: 'confidence_builder',
+  'job-search': 'jobseeker_operations',
+  networking: 'networking',
+};
+
 export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }: ChatContainerProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isToolRunning, setIsToolRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeToolName, setActiveToolName] = useState<string | null>(null);
+  const [draftMessage, setDraftMessage] = useState('');
+
+  const isStreaming = isLoading;
+  const shouldShowHomeChips =
+    !activeToolName &&
+    messages.length === 0 &&
+    !isStreaming &&
+    draftMessage.length === 0;
 
   const handleRememberMemory = async (candidate: { key: string; value: string }) => {
     try {
@@ -106,6 +127,17 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
     }
   };
 
+  const handleChipClick = async (text: string, toolName?: string) => {
+    if (toolName) {
+      // Tool launch: same as sidebar — map chip name to app tool name and call handleToolLaunch (fire-and-forget)
+      const appToolName = CHIP_TOOL_NAME_MAP[toolName] ?? toolName;
+      handleToolLaunch(appToolName);
+    } else {
+      // Regular message: send as chat
+      await sendMessage(text);
+    }
+  };
+
   // Expose handleToolLaunch to parent via ref callback
   useEffect(() => {
     if (onToolLaunchRef) {
@@ -182,11 +214,17 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
                 </p>
               </div>
               {/* Input centered below hero */}
-              <div className="w-full max-w-3xl">
-                <div className="mb-2">
-                  <ContextIndicator slots={slots} onClear={handleClearContext} />
+              <div className="w-full max-w-3xl space-y-3">
+                <div className="input-wrapper">
+                  <div className="mb-2">
+                    <ContextIndicator slots={slots} onClear={handleClearContext} />
+                  </div>
+                  <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} />
                 </div>
-                <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} />
+                <HomeStarterChips
+                  isVisible={shouldShowHomeChips}
+                  onChipClick={handleChipClick}
+                />
               </div>
             </div>
           </div>
@@ -205,13 +243,20 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
           isLoading={isLoading}
           onRememberMemory={handleRememberMemory}
           onToolLaunch={handleToolLaunch}
+          onEntryPromptSelect={sendMessage}
         />
         <div className="border-t border-[#2a2a2a] p-4">
-          <div className="mx-auto max-w-3xl">
-            <div className="mb-2">
-              <ContextIndicator slots={slots} onClear={handleClearContext} />
+          <div className="mx-auto max-w-3xl space-y-3">
+            <div className="input-wrapper">
+              <div className="mb-2">
+                <ContextIndicator slots={slots} onClear={handleClearContext} />
+              </div>
+              <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} />
             </div>
-            <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} />
+            <HomeStarterChips
+              isVisible={shouldShowHomeChips}
+              onChipClick={handleChipClick}
+            />
           </div>
         </div>
       </div>

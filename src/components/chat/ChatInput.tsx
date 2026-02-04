@@ -108,7 +108,7 @@ export default function ChatInput({ onSend, disabled = false, onUpload }: ChatIn
           onKeyDown={handleKeyDown}
           disabled={disabled}
           className="flex-1 resize-none overflow-hidden bg-transparent text-[#f5f5f5] placeholder-zinc-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed py-2 px-1"
-          placeholder={disabled ? 'Sending...' : 'Type your message...'}
+          placeholder={disabled ? 'Sending...' : 'Type your message or choose one of the options below...'}
           rows={1}
           style={{
             minHeight: '44px',
