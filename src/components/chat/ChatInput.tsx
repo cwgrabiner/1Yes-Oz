@@ -7,9 +7,11 @@ interface ChatInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
   onUpload?: (file: File) => void;
+  /** When true, placeholder mentions options below (home chips visible). */
+  showHomeChips?: boolean;
 }
 
-export default function ChatInput({ onSend, disabled = false, onUpload }: ChatInputProps) {
+export default function ChatInput({ onSend, disabled = false, onUpload, showHomeChips = false }: ChatInputProps) {
   const [content, setContent] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -108,7 +110,7 @@ export default function ChatInput({ onSend, disabled = false, onUpload }: ChatIn
           onKeyDown={handleKeyDown}
           disabled={disabled}
           className="flex-1 resize-none overflow-hidden bg-transparent text-[#f5f5f5] placeholder-zinc-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed py-2 px-1"
-          placeholder={disabled ? 'Sending...' : 'Type your message or choose one of the options below...'}
+          placeholder={disabled ? 'Sending...' : showHomeChips ? 'Type your message or choose one of the options below...' : 'Type your message here...'}
           rows={1}
           style={{
             minHeight: '44px',

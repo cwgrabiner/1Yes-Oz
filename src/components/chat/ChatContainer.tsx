@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Message } from '@/lib/chat/types';
 import type { PromptContextSlots } from '@/lib/prompt/buildPrompt';
 import type { ToolResult } from '@/lib/tools/types';
@@ -36,9 +36,18 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const [draftMessage, setDraftMessage] = useState('');
 
+  // Derive "tool active" from messages (last message with toolResult) so chips/placeholder hide when in a tool
+  const hasActiveToolFromMessages = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].toolResult?.toolName) return true;
+    }
+    return false;
+  }, [messages]);
+
   const isStreaming = isLoading;
   const shouldShowHomeChips =
     !activeToolName &&
+    !hasActiveToolFromMessages &&
     messages.length === 0 &&
     !isStreaming &&
     draftMessage.length === 0;
@@ -219,7 +228,7 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
                   <div className="mb-2">
                     <ContextIndicator slots={slots} onClear={handleClearContext} />
                   </div>
-                  <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} />
+                  <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} showHomeChips={shouldShowHomeChips} />
                 </div>
                 <HomeStarterChips
                   isVisible={shouldShowHomeChips}
@@ -251,7 +260,7 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
               <div className="mb-2">
                 <ContextIndicator slots={slots} onClear={handleClearContext} />
               </div>
-              <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} />
+              <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} showHomeChips={shouldShowHomeChips} />
             </div>
             <HomeStarterChips
               isVisible={shouldShowHomeChips}
