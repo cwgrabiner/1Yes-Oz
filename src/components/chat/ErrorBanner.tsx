@@ -5,9 +5,10 @@ import { useEffect } from 'react';
 interface ErrorBannerProps {
   error: string | null;
   onDismiss: () => void;
+  onRetry?: () => void;
 }
 
-export default function ErrorBanner({ error, onDismiss }: ErrorBannerProps) {
+export default function ErrorBanner({ error, onDismiss, onRetry }: ErrorBannerProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && error) {
@@ -43,11 +44,19 @@ export default function ErrorBanner({ error, onDismiss }: ErrorBannerProps) {
           <span className="text-sm text-red-300/90">Something went wrong. Please try again.</span>
         </div>
         <div className="flex items-center gap-2">
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="rounded px-3 py-1.5 text-sm font-medium text-red-300/90 transition-colors duration-200 hover:bg-red-900/20 hover:text-red-200"
+            >
+              Retry
+            </button>
+          )}
           <button
             onClick={onDismiss}
             className="rounded px-3 py-1.5 text-sm font-medium text-red-300/90 transition-colors duration-200 hover:bg-red-900/20 hover:text-red-200"
           >
-            Try again
+            {onRetry ? 'Dismiss' : 'Try again'}
           </button>
           <button
             onClick={onDismiss}

@@ -70,3 +70,56 @@ export async function PATCH(
     );
   }
 }
+
+/**
+ * DELETE /api/conversations/:id
+ * Soft delete: set deleted_at = now(). Does not hard delete.
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await supabaseServer();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { ok: false, error: 'Please sign in' },
+        { status: 401 }
+      );
+    }
+
+    const { data: conversation, error } = await supabase
+      .from('conversations')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Error soft-deleting conversation:', error);
+      return NextResponse.json(
+        { ok: false, error: 'Something went wrong. Please try again.' },
+        { status: 500 }
+      );
+    }
+
+    if (!conversation) {
+      return NextResponse.json(
+        { ok: false, error: 'Conversation not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Conversation delete error:', error);
+    return NextResponse.json(
+      { ok: false, error: 'Something went wrong. Please try again.' },
+      { status: 500 }
+    );
+  }
+}

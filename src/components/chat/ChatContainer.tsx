@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Message } from '@/lib/chat/types';
 import type { PromptContextSlots } from '@/lib/prompt/buildPrompt';
 import type { ToolResult } from '@/lib/tools/types';
+import { FileText, X } from 'lucide-react';
 import { appendMessage, normalizeMessages } from '@/lib/chat/history';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
@@ -15,6 +16,18 @@ interface ChatContainerProps {
   slots: PromptContextSlots;
   onSlotsChange: (slots: PromptContextSlots) => void;
   onToolLaunchRef?: (handler: (toolName: string) => void) => void;
+  onResetReady?: (reset: () => void) => void;
+  onLoadConversationReady?: (load: (conversationId: string) => Promise<void>) => void;
+  onConversationIdChange?: (conversationId: string | null) => void;
+  onConversationCreated?: () => void;
+  onErrorReady?: (setError: (msg: string | null) => void) => void;
+}
+
+/** One attached file (uploaded via input bar); text is from ingest API. */
+interface AttachedFile {
+  id: string;
+  name: string;
+  text: string;
 }
 
 // Map chip toolName (homeChips) to actual tool name (definitions/registry)
@@ -28,13 +41,58 @@ const CHIP_TOOL_NAME_MAP: Record<string, string> = {
   networking: 'networking',
 };
 
-export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }: ChatContainerProps) {
+export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, onResetReady, onLoadConversationReady, onConversationIdChange, onConversationCreated, onErrorReady }: ChatContainerProps) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isToolRunning, setIsToolRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const [draftMessage, setDraftMessage] = useState('');
+  const [loadErrorConversationId, setLoadErrorConversationId] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const attachedFilesRef = useRef<AttachedFile[]>([]);
+  attachedFilesRef.current = attachedFiles;
+
+  const resetChat = useCallback(() => {
+    setMessages([]);
+    setConversationId(null);
+    setActiveToolName(null);
+    setError(null);
+    setAttachedFiles([]);
+    onConversationIdChange?.(null);
+  }, [onConversationIdChange]);
+
+  const loadConversation = useCallback(
+    async (id: string) => {
+      setError(null);
+      setLoadErrorConversationId(null);
+      try {
+        const res = await fetch(`/api/conversations/${id}/messages`);
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          setError(json.error ?? 'Failed to load conversation');
+          setLoadErrorConversationId(id);
+          return;
+        }
+        const raw = json.data?.messages ?? [];
+        const loaded: Message[] = raw.map((m: { role: string; content: string; tool_result?: unknown }) => ({
+          role: m.role as Message['role'],
+          content: m.content ?? '',
+          ...(m.tool_result != null && { toolResult: m.tool_result as ToolResult }),
+        }));
+        setMessages(loaded);
+        setConversationId(id);
+        setActiveToolName(null);
+        setAttachedFiles([]);
+        onConversationIdChange?.(id);
+      } catch {
+        setError('Failed to load conversation');
+        setLoadErrorConversationId(id);
+      }
+    },
+    [onConversationIdChange]
+  );
 
   // Derive "tool active" from messages (last message with toolResult) so chips/placeholder hide when in a tool
   const hasActiveToolFromMessages = useMemo(() => {
@@ -88,8 +146,40 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
   };
 
   const handleClearContext = () => {
+    setAttachedFiles([]);
     onSlotsChange({});
   };
+
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/oz/ingest', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+        throw new Error(data.error);
+      }
+      if (!data.text) return;
+      const newFile: AttachedFile = { id: crypto.randomUUID(), name: file.name, text: data.text };
+      const newList = [...attachedFiles, newFile];
+      setAttachedFiles(newList);
+      onSlotsChange({ ...slots, careerFileText: newList.map((f) => f.text).join('\n\n') });
+    },
+    [attachedFiles, slots, onSlotsChange]
+  );
+
+  const handleRemoveAttachedFile = useCallback(
+    (id: string) => {
+      const newList = attachedFiles.filter((f) => f.id !== id);
+      setAttachedFiles(newList);
+      onSlotsChange({
+        ...slots,
+        careerFileText: newList.length > 0 ? newList.map((f) => f.text).join('\n\n') : undefined,
+      });
+    },
+    [attachedFiles, slots, onSlotsChange]
+  );
 
   const handleToolLaunch = async (toolName: string) => {
     setIsToolRunning(true);
@@ -155,6 +245,21 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onToolLaunchRef]);
 
+  // Expose reset (New Chat) to parent
+  useEffect(() => {
+    onResetReady?.(resetChat);
+  }, [onResetReady, resetChat]);
+
+  // Expose loadConversation to parent (sidebar click)
+  useEffect(() => {
+    onLoadConversationReady?.(loadConversation);
+  }, [onLoadConversationReady, loadConversation]);
+
+  // Expose setError so parent can show errors (e.g. delete conversation failure)
+  useEffect(() => {
+    onErrorReady?.(setError);
+  }, [onErrorReady]);
+
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading || isToolRunning) return;
 
@@ -168,15 +273,42 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
     setIsLoading(true);
 
     try {
+      const currentAttached = attachedFilesRef.current;
+      const slotsForRequest =
+        currentAttached.length > 0
+          ? { ...slots, careerFileText: currentAttached.map((f) => f.text).join('\n\n') }
+          : slots;
+
+      const requestBody: {
+        messages: ReturnType<typeof normalizeMessages>;
+        slots: PromptContextSlots;
+        conversationId?: string;
+      } = {
+        messages: normalizeMessages(updatedMessages),
+        conversationId: conversationId ?? undefined,
+      };
+      requestBody.slots = slotsForRequest;
+
+      console.log('attachedFiles count:', currentAttached.length);
+      console.log('slots keys:', Object.keys(slotsForRequest));
+      console.log('slotsForRequest:', slotsForRequest);
+      console.log('requestBody:', requestBody);
+
+      if (
+        currentAttached.length > 0 &&
+        Object.keys(requestBody.slots || {}).length === 0
+      ) {
+        console.error('BUG: attachments present but slots empty — aborting send');
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch('/api/oz/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: normalizeMessages(updatedMessages),
-          slots,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -186,7 +318,12 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
 
       const data = await response.json();
       const rawContent = data.text || data.content || 'No response received';
-      
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+        onConversationIdChange?.(data.conversationId);
+        onConversationCreated?.();
+      }
+
       // Keep raw content with markers in state - MessageItem will strip for display
       // and detect candidates for consent UI
       const assistantMessage: Message = {
@@ -195,6 +332,8 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
       };
 
       setMessages(appendMessage(updatedMessages, assistantMessage));
+      setAttachedFiles([]);
+      onSlotsChange({ ...slots, careerFileText: undefined });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
@@ -208,7 +347,14 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
   if (isEmpty) {
     return (
       <div className="relative flex h-full flex-col">
-        <ErrorBanner error={error} onDismiss={() => setError(null)} />
+        <ErrorBanner
+          error={error}
+          onDismiss={() => {
+            setError(null);
+            setLoadErrorConversationId(null);
+          }}
+          onRetry={loadErrorConversationId ? () => loadConversation(loadErrorConversationId) : undefined}
+        />
         <div className="flex-1 flex flex-col">
           {/* Hero section: fixed positioning, centered in full viewport, top third */}
           <div className="flex-1 flex justify-center items-center px-4">
@@ -228,7 +374,33 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
                   <div className="mb-2">
                     <ContextIndicator slots={slots} onClear={handleClearContext} />
                   </div>
-                  <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} showHomeChips={shouldShowHomeChips} />
+                  {attachedFiles.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {attachedFiles.map((f) => (
+                        <div
+                          key={f.id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] pl-2 pr-1 py-1.5 text-xs text-zinc-300"
+                        >
+                          <FileText className="w-3.5 h-3.5 shrink-0 text-zinc-500" />
+                          <span className="max-w-[140px] truncate">{f.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttachedFile(f.id)}
+                            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#2a2a2a] transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center -m-1"
+                            aria-label={`Remove ${f.name}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <ChatInput
+                    onSend={sendMessage}
+                    disabled={isLoading || isToolRunning}
+                    showHomeChips={shouldShowHomeChips}
+                    onUpload={handleFileUpload}
+                  />
                 </div>
                 <HomeStarterChips
                   isVisible={shouldShowHomeChips}
@@ -245,7 +417,14 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
   // Normal chat layout: messages + input pinned to bottom
   return (
     <div className="flex h-full flex-col">
-      <ErrorBanner error={error} onDismiss={() => setError(null)} />
+      <ErrorBanner
+        error={error}
+        onDismiss={() => {
+          setError(null);
+          setLoadErrorConversationId(null);
+        }}
+        onRetry={loadErrorConversationId ? () => loadConversation(loadErrorConversationId) : undefined}
+      />
       <div className="flex-1 flex flex-col min-h-0">
         <MessageList 
           messages={messages} 
@@ -260,7 +439,33 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef }:
               <div className="mb-2">
                 <ContextIndicator slots={slots} onClear={handleClearContext} />
               </div>
-              <ChatInput onSend={sendMessage} disabled={isLoading || isToolRunning} showHomeChips={shouldShowHomeChips} />
+              {attachedFiles.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {attachedFiles.map((f) => (
+                    <div
+                      key={f.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] pl-2 pr-1 py-1.5 text-xs text-zinc-300"
+                    >
+                      <FileText className="w-3.5 h-3.5 shrink-0 text-zinc-500" />
+                      <span className="max-w-[140px] truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAttachedFile(f.id)}
+                        className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#2a2a2a] transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center -m-1"
+                        aria-label={`Remove ${f.name}`}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <ChatInput
+                onSend={sendMessage}
+                disabled={isLoading || isToolRunning}
+                showHomeChips={shouldShowHomeChips}
+                onUpload={handleFileUpload}
+              />
             </div>
             <HomeStarterChips
               isVisible={shouldShowHomeChips}

@@ -195,7 +195,7 @@ export default function MemoryPanel() {
           )}
 
           {!isLoading && !error && items.length === 0 && (
-            <p className="text-xs text-zinc-500">No memories yet</p>
+            <p className="text-xs text-zinc-500">No memories saved yet.</p>
           )}
 
           {!isLoading && !error && items.length > 0 && (

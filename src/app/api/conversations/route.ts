@@ -80,8 +80,9 @@ export async function GET(request: NextRequest) {
 
     const { data: conversations, error } = await supabase
       .from('conversations')
-      .select('*')
+      .select('id, title, created_at, updated_at')
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .order('updated_at', { ascending: false });
 
     if (error) {

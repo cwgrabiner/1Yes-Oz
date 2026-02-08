@@ -8,6 +8,11 @@ import { stripMemoryMarkers } from '@/lib/memory/parse';
 
 export const runtime = 'nodejs';
 
+function generateTitle(firstMessage: string): string {
+  const trimmed = firstMessage.slice(0, 48).trim();
+  return trimmed.replace(/[.,!?;:]$/, '') || 'Untitled';
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Debug logging for Tavily configuration
@@ -16,9 +21,10 @@ export async function POST(request: NextRequest) {
     console.log('Tavily configured:', searchProvider?.isConfigured?.() ?? null);
 
     const body = await request.json();
-    const { messages, slots = {} } = body as {
+    const { messages, slots = {}, conversationId: clientConversationId } = body as {
       messages: Message[];
       slots?: PromptContextSlots;
+      conversationId?: string | null;
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -31,6 +37,8 @@ export async function POST(request: NextRequest) {
     // Step 1: Normalize and trim messages
     const normalizedMessages = normalizeMessages(messages);
     const trimmedMessages = trimMessagesForTokenBudget(normalizedMessages, 8000);
+
+    const lastUserMessage = trimmedMessages.filter((msg) => msg.role === 'user').pop();
 
     // Step 1.5: Get authenticated user and fetch career file
     // Graceful degradation: null careerFile = no career context
@@ -88,55 +96,44 @@ export async function POST(request: NextRequest) {
         memoryItems = null;
       }
 
-      // Get or create conversation for message persistence
+      // Resolve conversation: use client id if valid, else create on first user message only
       try {
-        // Try to get the most recent conversation
-        const { data: recentConversation, error: fetchError } = await supabase
-          .from('conversations')
-          .select('id')
-          .eq('user_id', user.id)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (recentConversation) {
-          conversationId = recentConversation.id;
-        } else if (fetchError && fetchError.code !== 'PGRST116') {
-          // PGRST116 means no rows found, which is fine - we'll create one
-          // Other errors should be logged
-          console.error('Error fetching conversation:', fetchError);
+        if (clientConversationId) {
+          const { data: existing } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('id', clientConversationId)
+            .eq('user_id', user.id)
+            .is('deleted_at', null)
+            .single();
+          if (existing) conversationId = existing.id;
         }
 
-        // Create new conversation if none exists
-        if (!conversationId) {
+        // No conversation yet: create only when we have a first user message (new chat)
+        if (!conversationId && lastUserMessage) {
+          const title = generateTitle(lastUserMessage.content);
           const { data: newConversation, error: createError } = await supabase
             .from('conversations')
             .insert({
               user_id: user.id,
-              title: null,
+              title,
               title_locked: false,
             })
-            .select()
+            .select('id')
             .single();
 
           if (createError) {
             console.error('Error creating conversation:', createError);
-            // Continue without conversationId - messages won't be saved but chat will work
           } else {
             conversationId = newConversation.id;
           }
         }
       } catch (error) {
-        // Graceful degradation: continue without conversationId
-        console.error('Error getting/creating conversation:', error);
+        console.error('Error resolving conversation:', error);
       }
     }
 
     // Step 2: Save user message to database (if authenticated and conversation exists)
-    const lastUserMessage = trimmedMessages
-      .filter((msg) => msg.role === 'user')
-      .pop();
-    
     if (lastUserMessage && conversationId && user) {
       try {
         // Generate a client_msg_id for deduplication (use timestamp + random)
@@ -306,8 +303,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Return text with markers intact - client will detect and strip for display
-    // Database already has clean version (markers stripped)
-    return NextResponse.json({ text });
+    // Database already has clean version (markers stripped). Include conversationId when set so client can store it.
+    return NextResponse.json(
+      conversationId ? { text, conversationId } : { text }
+    );
   } catch (error) {
     // TODO Phase 8: send to observability
     console.error('Chat API error:', error);
