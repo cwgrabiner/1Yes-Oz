@@ -274,31 +274,25 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
 
     try {
       const currentAttached = attachedFilesRef.current;
-      const slotsForRequest =
-        currentAttached.length > 0
-          ? { ...slots, careerFileText: currentAttached.map((f) => f.text).join('\n\n') }
-          : slots;
 
-      const requestBody: {
-        messages: ReturnType<typeof normalizeMessages>;
-        slots: PromptContextSlots;
-        conversationId?: string;
-      } = {
-        messages: normalizeMessages(updatedMessages),
+      // Build request with slots inline to prevent any mutation
+      const messagesPayload = normalizeMessages(updatedMessages);
+      const slotsPayload = currentAttached.length > 0
+        ? { ...slots, careerFileText: currentAttached.map((f) => f.text).join('\n\n') }
+        : { ...slots };
+
+      const requestBody = {
+        messages: messagesPayload,
+        slots: { ...slotsPayload },  // Spread to create new object
         conversationId: conversationId ?? undefined,
       };
-      requestBody.slots = slotsForRequest;
 
-      console.log('attachedFiles count:', currentAttached.length);
-      console.log('slots keys:', Object.keys(slotsForRequest));
-      console.log('slotsForRequest:', slotsForRequest);
-      console.log('requestBody:', requestBody);
-
-      if (
-        currentAttached.length > 0 &&
-        Object.keys(requestBody.slots || {}).length === 0
-      ) {
-        console.error('BUG: attachments present but slots empty — aborting send');
+      // Verify slots made it into requestBody
+      if (currentAttached.length > 0 && (!requestBody.slots?.careerFileText)) {
+        console.error('CRITICAL BUG: File attached but slots.careerFileText missing');
+        console.error('Attached files:', currentAttached.map(f => f.name));
+        console.error('Request body:', requestBody);
+        setError('File upload failed - please try again');
         setIsLoading(false);
         return;
       }
