@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Message } from '@/lib/chat/types';
+import type { RouterState } from '@/lib/ai/router/types';
 import type { PromptContextSlots } from '@/lib/prompt/buildPrompt';
 import type { ToolResult } from '@/lib/tools/types';
 import { FileText, X } from 'lucide-react';
@@ -51,6 +52,7 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
   const [draftMessage, setDraftMessage] = useState('');
   const [loadErrorConversationId, setLoadErrorConversationId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [aiState, setAiState] = useState<RouterState | undefined>(undefined);
   const attachedFilesRef = useRef<AttachedFile[]>([]);
   attachedFilesRef.current = attachedFiles;
 
@@ -60,6 +62,7 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
     setActiveToolName(null);
     setError(null);
     setAttachedFiles([]);
+    setAiState(undefined);
     onConversationIdChange?.(null);
   }, [onConversationIdChange]);
 
@@ -85,6 +88,7 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
         setConversationId(id);
         setActiveToolName(null);
         setAttachedFiles([]);
+        setAiState(undefined);
         onConversationIdChange?.(id);
       } catch {
         setError('Failed to load conversation');
@@ -285,6 +289,7 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
         messages: messagesPayload,
         slots: { ...slotsPayload },  // Spread to create new object
         conversationId: conversationId ?? undefined,
+        state: aiState,
       };
 
       // Verify slots made it into requestBody
@@ -316,6 +321,9 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
         setConversationId(data.conversationId);
         onConversationIdChange?.(data.conversationId);
         onConversationCreated?.();
+      }
+      if (data.state) {
+        setAiState(data.state);
       }
 
       // Keep raw content with markers in state - MessageItem will strip for display

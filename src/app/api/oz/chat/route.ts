@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildPrompt, type PromptContextSlots } from '@/lib/prompt/buildPrompt';
+import { generatePrompt } from '@/lib/ai/orchestrator';
+import type { RouterState } from '@/lib/ai/router/types';
+import type { PromptContextSlots } from '@/lib/prompt/buildPrompt';
 import { normalizeMessages, trimMessagesForTokenBudget } from '@/lib/chat/history';
 import type { Message } from '@/lib/chat/types';
 import { getSearchProvider, shouldSearch, formatSearchResults, formatSources } from '@/lib/tools/search/provider';
@@ -13,6 +15,26 @@ function generateTitle(firstMessage: string): string {
   return trimmed.replace(/[.,!?;:]$/, '') || 'Untitled';
 }
 
+function formatCareerFileAndMemory(
+  careerFile: { display_name?: string | null; user_current_role?: string | null; target_role?: string | null; goals?: string | null } | null,
+  memoryItems: Array<{ key: string; value: string }> | null
+): string | undefined {
+  const parts: string[] = [];
+  if (careerFile && Object.values(careerFile).some((v) => v != null && String(v).trim())) {
+    const lines: string[] = [];
+    if (careerFile.display_name?.trim()) lines.push(`- User's Name: ${careerFile.display_name.trim()}`);
+    if (careerFile.user_current_role?.trim()) lines.push(`- Current Role: ${careerFile.user_current_role.trim()}`);
+    if (careerFile.target_role?.trim()) lines.push(`- Target Role: ${careerFile.target_role.trim()}`);
+    if (careerFile.goals?.trim()) lines.push(`- Goals: ${careerFile.goals.trim()}`);
+    if (lines.length) parts.push('CAREER FILE:\n' + lines.join('\n'));
+  }
+  if (memoryItems && memoryItems.length > 0) {
+    const memoryLines = memoryItems.map((i) => `- ${i.key}: ${i.value}`);
+    parts.push('MEMORY:\n' + memoryLines.join('\n'));
+  }
+  return parts.length ? parts.join('\n\n') : undefined;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Debug logging for Tavily configuration
@@ -21,10 +43,11 @@ export async function POST(request: NextRequest) {
     console.log('Tavily configured:', searchProvider?.isConfigured?.() ?? null);
 
     const body = await request.json();
-    const { messages, slots = {}, conversationId: clientConversationId } = body as {
+    const { messages, slots = {}, conversationId: clientConversationId, state } = body as {
       messages: Message[];
       slots?: PromptContextSlots;
       conversationId?: string | null;
+      state?: RouterState;
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -184,16 +207,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Step 3: Build prompt with system instruction, context, and messages
-    const promptPayload = buildPrompt({
-      messages: trimmedMessages,
-      slots: slots || {},
-      searchResults,
-      searchConfigured: !!searchProvider,
-      searchDecision,
-      searchFailed,
-      careerFile,
-      memoryItems,
+    // Step 3: Build prompt with new personality system (router + assembler)
+    const userText = lastUserMessage?.content ?? '';
+    const memorySummary = formatCareerFileAndMemory(careerFile, memoryItems);
+
+    const promptOutput = await generatePrompt({
+      userText,
+      prevState: state,
+      memorySummary: memorySummary || undefined,
+      conversationHistory: trimmedMessages,
     });
 
     // Get API configuration from environment
@@ -211,14 +233,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 3: Prepare messages for OpenAI API
-    const systemContent = promptPayload.system + (promptPayload.context ? `\n\n${promptPayload.context}` : '');
-    
     const openAIMessages = [
       {
         role: 'system',
-        content: systemContent,
+        content: promptOutput.systemPrompt,
       },
-      ...promptPayload.messages
+      ...trimmedMessages
         .filter((msg) => msg.role !== 'system')
         .map((msg) => ({
           role: msg.role,
@@ -303,10 +323,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Return text with markers intact - client will detect and strip for display
-    // Database already has clean version (markers stripped). Include conversationId when set so client can store it.
-    return NextResponse.json(
-      conversationId ? { text, conversationId } : { text }
-    );
+    // Database already has clean version (markers stripped). Include conversationId and state when set.
+    return NextResponse.json({
+      text,
+      ...(conversationId && { conversationId }),
+      state: promptOutput.nextState,
+      ...(process.env.NODE_ENV === 'development' && { telemetry: promptOutput.telemetry }),
+    });
   } catch (error) {
     // TODO Phase 8: send to observability
     console.error('Chat API error:', error);
