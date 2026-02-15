@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Oz - AI Assistant",
-  description: "AI assistant with context management",
+  title: "1Yes - AI Career Partner",
+  description: "Your adaptive AI career partner for job search, interviews, and negotiation",
 };
 
 export default function RootLayout({
@@ -24,6 +24,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <link rel="icon" href="/logo/1y-logo.png" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
