@@ -3,17 +3,24 @@ import { assemblePrompt } from './assembler';
 import { retrieveContext } from './retrieval';
 import type { RouterState } from './router/types';
 import type { Message } from '../chat/types';
+import { getTool } from '../tools/definitions';
+import { loadToolPrompt } from '../tools/loadToolPrompt';
 
 interface GeneratePromptInput {
   userText: string;
   prevState?: RouterState;
   memorySummary?: string;
   conversationHistory?: Message[];
+  toolsIndex?: string;
+  activeToolPrompt?: string;
+  webSearchConfig?: string;
+  webSearchResults?: string;
 }
 
 interface GeneratePromptOutput {
   systemPrompt: string;
   nextState: RouterState;
+  activeTool?: string;
   telemetry: {
     posture: string;
     priority: string;
@@ -35,7 +42,7 @@ interface GeneratePromptOutput {
  * This is what the API route calls instead of buildPrompt()
  */
 export async function generatePrompt(input: GeneratePromptInput): Promise<GeneratePromptOutput> {
-  const { userText, prevState, memorySummary } = input;
+  const { userText, prevState, memorySummary, toolsIndex, activeToolPrompt, webSearchConfig, webSearchResults } = input;
 
   // 1. Route the turn
   const routerOutput = routeTurn({
@@ -44,7 +51,10 @@ export async function generatePrompt(input: GeneratePromptInput): Promise<Genera
     memorySummary
   });
 
-  const { nextState, moduleIds, retrievalQuery } = routerOutput;
+  const { nextState, moduleIds, retrievalQuery, activeTool: routerActiveTool } = routerOutput;
+
+  // Use router-recommended tool when client didn't send one
+  const effectiveActiveToolPrompt = activeToolPrompt ?? (routerActiveTool ? (loadToolPrompt(routerActiveTool) || getTool(routerActiveTool)?.systemPrompt || '') : undefined);
 
   // 2. Retrieve domain context (NEW - Week 3)
   let retrievedChunk: string | undefined;
@@ -65,13 +75,18 @@ export async function generatePrompt(input: GeneratePromptInput): Promise<Genera
   const assembled = assemblePrompt({
     moduleIds,
     memorySummary,
-    retrievedChunk // Now actually populated with domain expertise
+    retrievedChunk, // Now actually populated with domain expertise
+    toolsIndex,
+    activeToolPrompt: effectiveActiveToolPrompt,
+    webSearchConfig,
+    webSearchResults
   });
 
   // 4. Return prompt + state + telemetry
   return {
     systemPrompt: assembled.systemPrompt,
     nextState,
+    ...(routerActiveTool && { activeTool: routerActiveTool }),
     telemetry: {
       posture: nextState.posture,
       priority: nextState.priority,

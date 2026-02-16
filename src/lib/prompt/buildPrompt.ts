@@ -10,6 +10,11 @@ export interface PromptContextSlots {
   careerFileText?: string;
   pastedText?: string;
   notesStub?: string;
+  toolsIndex?: string;
+  activeToolPrompt?: string;
+  activeToolName?: string;
+  webSearchConfig?: string;
+  webSearchResults?: string;
 }
 
 export interface PromptPayload {

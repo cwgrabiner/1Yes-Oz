@@ -4,6 +4,59 @@
  */
 
 import { detectSignals } from './signals';
+
+/**
+ * Detect if user query needs web search (current events, verifiable facts)
+ * Conservative: ONLY triggers for truly current events, not general questions.
+ */
+export function detectWebSearchNeed(text: string): boolean {
+  const normalized = text.toLowerCase();
+
+  // ONLY trigger for VERY recent time references
+  const veryRecentIndicators = [
+    'today', 'tonight', 'this week', 'this month',
+    'yesterday', 'last week', 'last month',
+    'latest', 'recent news', 'just announced'
+  ];
+
+  // ONLY trigger for current year or specific recent dates
+  const hasCurrentYear = normalized.includes('2026') || normalized.includes('2025');
+
+  // ONLY trigger for verifiable facts about current state
+  const currentStateQuestions = [
+    'who won', 'who is the current', 'what is the current price',
+    'stock price', 'who holds', 'current ceo', 'current president'
+  ];
+
+  const hasVeryRecentIndicator = veryRecentIndicators.some(phrase => normalized.includes(phrase));
+  const hasCurrentStateQuestion = currentStateQuestions.some(phrase => normalized.includes(phrase));
+
+  // ONLY search if BOTH recent indicator AND (current year OR current state question)
+  // OR if it's a very recent time reference without domain context
+  return (hasVeryRecentIndicator && (hasCurrentYear || hasCurrentStateQuestion)) ||
+    (hasCurrentStateQuestion && hasCurrentYear);
+}
+
+/**
+ * Detect which tool to activate based on domain, urgency, and user text
+ */
+function detectToolNeed(text: string, domain: Domain, urgency: Urgency): string | undefined {
+  const normalized = text.toLowerCase();
+
+  // Interview prep tool
+  if (domain === 'interview' && (urgency === 'high' || urgency === 'medium')) {
+    const interviewSignals = ['interview', 'interviewing', 'phone screen', 'onsite'];
+    if (interviewSignals.some(signal => normalized.includes(signal))) {
+      return 'interview_prep';
+    }
+  }
+
+  // Add other tool detections here as needed
+  // Example: networking tool, resume tool, etc.
+
+  return undefined;
+}
+
 import { determinePosture } from './postureSwitching';
 import type { RouterInput, RouterOutput, RouterState, Domain, Stage, Urgency, Signals } from './types';
 import { DEFAULT_STATE } from './types';
@@ -24,6 +77,9 @@ export function routeTurn(input: RouterInput): RouterOutput {
   
   // 3. Determine urgency
   const urgency = pickUrgency(signals, prevState);
+
+  // 3.5 Tool detection
+  const activeTool = detectToolNeed(userText, domain, urgency);
   
   // 4. Determine posture, priority, friction, energy
   const { posture, priority, friction, user_energy } = determinePosture(signals, {
@@ -49,11 +105,16 @@ export function routeTurn(input: RouterInput): RouterOutput {
   
   // 7. Generate retrieval query
   const retrievalQuery = buildRetrievalQuery(nextState, userText);
-  
+
+  // 8. Web search detection for current events
+  const needsWebSearch = detectWebSearchNeed(userText);
+
   return {
     nextState,
     moduleIds,
-    retrievalQuery
+    retrievalQuery,
+    needsWebSearch,
+    activeTool
   };
 }
 

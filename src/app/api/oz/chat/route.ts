@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generatePrompt } from '@/lib/ai/orchestrator';
+import { detectWebSearchNeed } from '@/lib/ai/router';
 import type { RouterState } from '@/lib/ai/router/types';
 import type { PromptContextSlots } from '@/lib/prompt/buildPrompt';
 import { normalizeMessages, trimMessagesForTokenBudget } from '@/lib/chat/history';
 import type { Message } from '@/lib/chat/types';
 import { getSearchProvider, shouldSearch, formatSearchResults, formatSources } from '@/lib/tools/search/provider';
+import { getToolsIndex, getTool } from '@/lib/tools/definitions';
+import { loadToolPrompt } from '@/lib/tools/loadToolPrompt';
 import { supabaseServer } from '@/lib/supabase/server';
 import { stripMemoryMarkers } from '@/lib/memory/parse';
 
@@ -192,9 +195,11 @@ export async function POST(request: NextRequest) {
 
     if (lastUserMessage) {
       searchDecision = shouldSearch(lastUserMessage.content);
-      
-      // Perform explicit search if needed and provider is configured
-      if (searchDecision === 'explicit' && searchProvider) {
+      const needsWebSearch = detectWebSearchNeed(lastUserMessage.content);
+
+      // Perform search when explicit OR router detects current-events need (and no results yet)
+      const shouldRunSearch = (searchDecision === 'explicit' || needsWebSearch) && searchProvider;
+      if (shouldRunSearch) {
         try {
           const searchResponse = await searchProvider.search(lastUserMessage.content);
           searchResults = { results: searchResponse.results };
@@ -211,12 +216,36 @@ export async function POST(request: NextRequest) {
     const userText = lastUserMessage?.content ?? '';
     const memorySummary = formatCareerFileAndMemory(careerFile, memoryItems);
 
+    // Derive tools and web search slots (port from buildPrompt when not provided by client)
+    const activeToolName = slots.activeToolName;
+    const toolsIndex = slots.toolsIndex ?? getToolsIndex();
+    const activeToolPrompt = slots.activeToolPrompt ?? (activeToolName ? (loadToolPrompt(activeToolName) || getTool(activeToolName)?.systemPrompt || '') : undefined);
+    const searchConfigured = searchProvider?.isConfigured?.() ?? false;
+    const webSearchConfig = slots.webSearchConfig ?? (searchConfigured
+      ? (searchFailed && searchDecision === 'explicit'
+        ? 'I can search the public web when needed to find current information.\n\nA search was attempted but failed. Respond: "I couldn\'t access current web data, but based on general knowledge..."'
+        : 'I can search the public web when needed to find current information.')
+      : 'Web search is not configured in this environment. Answer from general knowledge only. If asked about current information, respond: "I don\'t have access to current web data, but based on general knowledge..."');
+    const webSearchResults = slots.webSearchResults ?? (searchResults && searchResults.results.length > 0
+      ? `I'm searching for current information and found these results:\n${formatSearchResults(searchResults)}\n\nSearch result guidelines:\n- Never treat search results as ground truth\n- For salary information, use ranges: "typically ranges..." rather than exact numbers\n- For company information, always caveat with "public sources suggest..."\n- Include a "Sources:" section at the end of your response with 2-3 URLs from the search results`
+      : searchDecision === 'ask_permission' && searchConfigured && !searchFailed
+        ? 'The user might benefit from current web information. You can offer: "I can check current public info if you\'d like — should I?"'
+        : undefined);
+
     const promptOutput = await generatePrompt({
       userText,
       prevState: state,
       memorySummary: memorySummary || undefined,
       conversationHistory: trimmedMessages,
+      toolsIndex,
+      activeToolPrompt,
+      webSearchConfig,
+      webSearchResults,
     });
+
+    // Router-recommended tool: when no tool was active, orchestrator already injected its prompt.
+    // Return activeTool so client can show "Interview prep active" or send as slots.activeToolName next time.
+    const recommendedActiveTool = promptOutput.activeTool && !activeToolName ? promptOutput.activeTool : undefined;
 
     // Get API configuration from environment
     const apiKey = process.env.OPENAI_API_KEY;
@@ -323,11 +352,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Return text with markers intact - client will detect and strip for display
-    // Database already has clean version (markers stripped). Include conversationId and state when set.
+    // Database already has clean version (markers stripped). Include conversationId, state, and activeTool when set.
     return NextResponse.json({
       text,
       ...(conversationId && { conversationId }),
       state: promptOutput.nextState,
+      ...(recommendedActiveTool && { activeTool: recommendedActiveTool }),
       ...(process.env.NODE_ENV === 'development' && { telemetry: promptOutput.telemetry }),
     });
   } catch (error) {

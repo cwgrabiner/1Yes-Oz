@@ -8,6 +8,10 @@ interface AssembleInput {
   moduleIds: string[];
   memorySummary?: string;
   retrievedChunk?: string;
+  toolsIndex?: string;
+  activeToolPrompt?: string;
+  webSearchConfig?: string;
+  webSearchResults?: string;
 }
 
 interface AssembleOutput {
@@ -18,7 +22,7 @@ interface AssembleOutput {
 }
 
 export function assemblePrompt(input: AssembleInput): AssembleOutput {
-  const { moduleIds, memorySummary, retrievedChunk } = input;
+  const { moduleIds, memorySummary, retrievedChunk, toolsIndex, activeToolPrompt, webSearchConfig, webSearchResults } = input;
   
   // 1. Get modules from registry
   let modules = getModules(moduleIds);
@@ -38,6 +42,42 @@ export function assemblePrompt(input: AssembleInput): AssembleOutput {
       name: m.id,
       content: `### ${m.id}\n${m.content}`,
       tokens: estimateTokens(m.content)
+    });
+  }
+
+  // Add tools index (priority 1 - never drop)
+  if (toolsIndex) {
+    sections.push({
+      name: "tools_index",
+      content: toolsIndex,
+      tokens: estimateTokens(toolsIndex)
+    });
+  }
+
+  // Add active tool prompt (priority 1 - never drop)
+  if (activeToolPrompt) {
+    sections.push({
+      name: "active_tool_prompt",
+      content: activeToolPrompt,
+      tokens: estimateTokens(activeToolPrompt)
+    });
+  }
+
+  // Add web search config (priority 1 - never drop)
+  if (webSearchConfig) {
+    sections.push({
+      name: "web_search_config",
+      content: webSearchConfig,
+      tokens: estimateTokens(webSearchConfig)
+    });
+  }
+
+  // Add web search results (priority 2 - can truncate)
+  if (webSearchResults) {
+    sections.push({
+      name: "web_search_results",
+      content: `### WEB SEARCH RESULTS\n${webSearchResults}`,
+      tokens: estimateTokens(webSearchResults)
     });
   }
   
@@ -134,7 +174,13 @@ export function assemblePrompt(input: AssembleInput): AssembleOutput {
   
   // 8. Get final module list
   const modulesIncluded = sections
-    .filter(s => !s.name.includes("memory") && !s.name.includes("retrieved"))
+    .filter(s =>
+      !s.name.includes("memory") &&
+      !s.name.includes("retrieved") &&
+      !s.name.includes("tools") &&
+      !s.name.includes("active_tool") &&
+      !s.name.includes("web_search")
+    )
     .map(s => s.name);
   
   return {

@@ -98,4 +98,6 @@ export interface RouterOutput {
   nextState: RouterState;      // Evolved state for next turn
   moduleIds: string[];         // Which modules to include in prompt
   retrievalQuery?: string;     // Query for domain content retrieval (optional)
+  needsWebSearch?: boolean;    // Auto-trigger web search for current events questions
+  activeTool?: string;         // Recommended tool to activate
 }
