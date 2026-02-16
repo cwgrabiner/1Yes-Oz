@@ -42,13 +42,17 @@ interface GeneratePromptOutput {
  * This is what the API route calls instead of buildPrompt()
  */
 export async function generatePrompt(input: GeneratePromptInput): Promise<GeneratePromptOutput> {
-  const { userText, prevState, memorySummary, toolsIndex, activeToolPrompt, webSearchConfig, webSearchResults } = input;
+  const { userText, prevState, memorySummary, conversationHistory, toolsIndex, activeToolPrompt, webSearchConfig, webSearchResults } = input;
 
   // 1. Route the turn
+  const turnCount = conversationHistory
+    ? Math.max(0, conversationHistory.filter((m) => m.role === 'user').length - 1)
+    : 0;
   const routerOutput = routeTurn({
     userText,
     prevState,
-    memorySummary
+    memorySummary,
+    turnCount
   });
 
   const { nextState, moduleIds, retrievalQuery, activeTool: routerActiveTool } = routerOutput;

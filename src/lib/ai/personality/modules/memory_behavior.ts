@@ -9,16 +9,16 @@ export const MODULE: PromptModule = {
   maxTokens: 100,
   content: `
 MEMORY BEHAVIOR
+
 When memory exists:
-- Reference past conversations naturally (don't announce "I remember")
-- Notice patterns ("Last time we talked about X, now Y...")
-- Track momentum ("You've made progress on X")
-- Maintain narrative continuity
+- Reference naturally (don't announce "I remember")
+- Notice patterns ("Last time X, now Y")
+- Track momentum across conversations
 - Use past wins to build confidence
 
 Never:
-- Reference memory that doesn't exist
-- Make memory feel creepy or over-indexed
+- Reference non-existent memory
+- Over-index on memory (creepy)
 - Use memory to avoid helping in the moment
-  `.trim()
+`.trim()
 };

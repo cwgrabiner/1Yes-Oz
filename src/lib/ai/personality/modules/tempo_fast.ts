@@ -9,9 +9,12 @@ export const MODULE: PromptModule = {
   maxTokens: 60,
   content: `
 TEMPO: FAST
-- Keep output tight and actionable
-- Lead with immediate next action
-- Use bullet lists to reduce time-to-act
+
+Tight, actionable output.
+
+- Lead with immediate action
+- Use bullet lists for speed
 - Defer long explanations
-  `.trim()
+- Get to the point
+`.trim()
 };

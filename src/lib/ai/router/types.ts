@@ -89,6 +89,7 @@ export interface RouterInput {
   userText: string;
   prevState?: RouterState;
   memorySummary?: string;
+  turnCount?: number;  // 0 = first turn (welcoming passive arrivals)
 }
 
 /**

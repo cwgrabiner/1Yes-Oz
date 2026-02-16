@@ -9,12 +9,27 @@ import type { Signals, RouterState, Posture, Priority, FrictionLevel, UserEnergy
  * Determines the appropriate posture, priority, friction, and energy
  * based on detected signals and previous state
  */
-export function determinePosture(signals: Signals, prevState: RouterState): {
+export function determinePosture(
+  signals: Signals,
+  prevState: RouterState,
+  turnCount: number = 0
+): {
   posture: Posture;
   priority: Priority;
   friction: FrictionLevel;
   user_energy: UserEnergy;
 } {
+  // RULE 0: First turn, no urgency → Calm Expert (welcoming)
+  // Handle passive/curious arrivals from LinkedIn etc.
+  if (turnCount === 0 && !signals.urgencyHigh && !signals.readyToAct && !signals.distress) {
+    return {
+      posture: "calm_expert",
+      priority: "increase_odds",
+      friction: "low",
+      user_energy: "neutral"
+    };
+  }
+
   // RULE 1: Distress → Companion first
   // Stabilize before moving to action
   if (signals.distress) {

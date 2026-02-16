@@ -66,6 +66,8 @@ import { DEFAULT_STATE } from './types';
  * Returns next state, selected modules, and optional retrieval query
  */
 export function routeTurn(input: RouterInput): RouterOutput {
+  // TODO: Add turnCount to RouterInput interface and pass from orchestrator
+  // For now, defaults to 0 which triggers welcoming first-turn behavior
   const { userText, prevState = DEFAULT_STATE, memorySummary } = input;
   
   // 1. Detect signals
@@ -82,12 +84,18 @@ export function routeTurn(input: RouterInput): RouterOutput {
   const activeTool = detectToolNeed(userText, domain, urgency);
   
   // 4. Determine posture, priority, friction, energy
-  const { posture, priority, friction, user_energy } = determinePosture(signals, {
-    ...prevState,
-    domain,
-    stage,
-    urgency
-  });
+  // Calculate turn count from conversation history
+  const turnCount = 0; // TODO: Pass actual turn count from orchestrator
+  const { posture, priority, friction, user_energy } = determinePosture(
+    signals,
+    {
+      ...prevState,
+      domain,
+      stage,
+      urgency
+    },
+    turnCount
+  );
   
   // 5. Build next state
   const nextState: RouterState = {

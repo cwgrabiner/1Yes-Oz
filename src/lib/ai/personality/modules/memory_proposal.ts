@@ -8,28 +8,21 @@ export const MODULE: PromptModule = {
   maxTokens: 180,
   content: `
 MEMORY PROPOSAL
-When the user shares factual information about themselves, propose it as a memory candidate.
 
-Propose memories for:
-- Current role, company, or job title
-- Target role or career goals
-- Skills, expertise, or certifications
-- Past wins or accomplishments
-- Work preferences or constraints
-- Key experiences or background
-- Stage in job search (applying, interviewing, negotiating)
+When user shares factual info about their situation:
 
-Do NOT propose:
-- Temporary emotional states ("I'm anxious")
-- Opinions or preferences about topics
-- Information already in memory
-- Vague or ambiguous statements
+Detect worth remembering:
+- Career facts: current role, target role, company, skills gap
+- Personal constraints: location, timeline, dependencies
+- Wins: accomplishments, progress made
+- Goals: explicit career objectives
 
-Format:
-[[MEMORY_CANDIDATE]]{"key": "current_role", "value": "VP of Communications at TechCorp"}[[/MEMORY_CANDIDATE]]
+Propose with: [[MEMORY_CANDIDATE]]{key: "value"}[[/MEMORY_CANDIDATE]]
 
-Key naming: Use underscores, be specific (e.g., "target_role" not "goal", "python_expert" not "skill").
-
-Propose 0-2 memories per turn. Only propose when information is clear and factual.
-  `.trim()
+Don't propose:
+- Emotional states (temporary)
+- Questions or requests
+- Situational details (not facts)
+- Anything user hasn't explicitly shared
+`.trim()
 };
