@@ -38,6 +38,41 @@ export function detectWebSearchNeed(text: string): boolean {
 }
 
 /**
+ * Detect when to offer a wizard (e.g. Résumé Makeover) based on domain
+ * Offer for ANY resume help EXCEPT very specific micro-questions
+ */
+function detectWizardOffer(
+  userText: string,
+  domain: Domain,
+  _urgency: Urgency,
+  _signals: Signals
+): string | undefined {
+  const normalized = userText.toLowerCase().trim();
+
+  if (domain === 'resume') {
+    // DON'T offer wizard for these specific, narrow asks (quick in-chat questions)
+    const quickQuestions = [
+      'rewrite this bullet',
+      'fix this sentence',
+      'is this good',
+      'does this sound',
+      'what verb should',
+      'how do i say',
+      'should i include',
+      'can i put'
+    ];
+
+    const isQuickQuestion = quickQuestions.some((phrase) => normalized.includes(phrase));
+
+    if (!isQuickQuestion) {
+      return 'resumes';
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Detect which tool to activate based on domain, urgency, and user text
  */
 function detectToolNeed(text: string, domain: Domain, urgency: Urgency): string | undefined {
@@ -109,7 +144,7 @@ export function routeTurn(input: RouterInput): RouterOutput {
   };
   
   // 6. Select modules
-  const moduleIds = selectModules(nextState, memorySummary);
+  const moduleIds = selectModules(nextState, memorySummary, userText);
   
   // 7. Generate retrieval query
   const retrievalQuery = buildRetrievalQuery(nextState, userText);
@@ -117,12 +152,16 @@ export function routeTurn(input: RouterInput): RouterOutput {
   // 8. Web search detection for current events
   const needsWebSearch = detectWebSearchNeed(userText);
 
+  // 9. Wizard offer (e.g. Résumé Makeover) when resume domain + high intent
+  const wizardOffer = detectWizardOffer(userText, nextState.domain, nextState.urgency, signals);
+
   return {
     nextState,
     moduleIds,
     retrievalQuery,
     needsWebSearch,
-    activeTool
+    activeTool,
+    wizardOffer
   };
 }
 
@@ -190,7 +229,7 @@ function pickUrgency(signals: Signals, prevState: RouterState): Urgency {
 /**
  * Select which modules to include based on state
  */
-function selectModules(state: RouterState, memorySummary?: string): string[] {
+function selectModules(state: RouterState, memorySummary?: string, userText?: string): string[] {
   const modules: string[] = [];
   
   // ALWAYS INCLUDE (invariants)
@@ -229,6 +268,34 @@ function selectModules(state: RouterState, memorySummary?: string): string[] {
     modules.push("decision_philosophy");
   }
   
+  // TOOL MODULE: job search signals take priority (check userText, not domain state)
+  const jobSearchPhrases = [
+    "job search", "all over the place", "get organized",
+    "search strategy", "tracking applications", "pipeline",
+    "job hunt", "organize my search", "search operations",
+    "tracking", "applications", "applying", "overwhelmed with search"
+  ];
+  const userTextLower = userText?.toLowerCase() ?? "";
+  const hasJobSearchSignals = jobSearchPhrases.some((phrase) =>
+    userTextLower.includes(phrase)
+  );
+
+  if (hasJobSearchSignals) {
+    modules.push("tool_jobseeker_ops");
+  } else if (state.domain === "resume") {
+    modules.push("tool_resumes");
+  } else if (state.domain === "interview") {
+    modules.push("tool_interview_prep");
+  } else if (state.domain === "linkedin") {
+    modules.push("tool_linkedin");
+  } else if (state.domain === "negotiation") {
+    modules.push("tool_negotiations");
+  } else if (state.domain === "networking") {
+    modules.push("tool_networking");
+  } else if (state.domain === "confidence") {
+    modules.push("tool_confidence");
+  }
+
   // POV (optional, add if token budget allows)
   modules.push("pov_core");
   

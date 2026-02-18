@@ -6,4 +6,5 @@ export interface Message {
   role: MessageRole;
   content: string;
   toolResult?: ToolResult;
+  wizardOffer?: string;
 }

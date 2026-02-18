@@ -155,3 +155,16 @@ export interface Database {
     };
   };
 }
+
+export interface ToolSession {
+  id: string;
+  user_id: string;
+  tool_name: string;
+  current_step: number;
+  total_steps: number;
+  session_data: Record<string, unknown>;
+  status: 'active' | 'completed' | 'abandoned';
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}

@@ -6,12 +6,14 @@ import { Paperclip, SendHorizontal } from 'lucide-react';
 interface ChatInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
+  /** When true, grays out input and shows "Exit wizard to resume chat" */
+  wizardActive?: boolean;
   onUpload?: (file: File) => void;
   /** When true, placeholder mentions options below (home chips visible). */
   showHomeChips?: boolean;
 }
 
-export default function ChatInput({ onSend, disabled = false, onUpload, showHomeChips = false }: ChatInputProps) {
+export default function ChatInput({ onSend, disabled = false, wizardActive = false, onUpload, showHomeChips = false }: ChatInputProps) {
   const [content, setContent] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -29,8 +31,9 @@ export default function ChatInput({ onSend, disabled = false, onUpload, showHome
     adjustTextareaHeight();
   }, [content]);
 
+  const isDisabled = disabled || wizardActive;
   const handleSubmit = () => {
-    if (content.trim() && !disabled) {
+    if (content.trim() && !isDisabled) {
       onSend(content);
       setContent('');
       // Reset textarea height after clearing
@@ -71,11 +74,11 @@ export default function ChatInput({ onSend, disabled = false, onUpload, showHome
   };
 
   const hasContent = content.trim().length > 0;
-  const showSendButton = hasContent || !disabled;
+  const showSendButton = hasContent || !isDisabled;
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="relative flex items-end gap-2 rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a] p-3 focus-within:border-[#16a34a]/50 focus-within:ring-2 focus-within:ring-green-500/50 focus-within:shadow-lg focus-within:shadow-green-500/20 transition-all duration-200">
+      <div className={`relative flex items-end gap-2 rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a] p-3 transition-all duration-200 ${wizardActive ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'focus-within:border-[#16a34a]/50 focus-within:ring-2 focus-within:ring-green-500/50 focus-within:shadow-lg focus-within:shadow-green-500/20'}`}>
         {/* Hidden file input */}
         {onUpload && (
           <input
@@ -83,7 +86,7 @@ export default function ChatInput({ onSend, disabled = false, onUpload, showHome
             type="file"
             accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
             onChange={handleFileChange}
-            disabled={disabled || isUploading}
+            disabled={isDisabled || isUploading}
             className="hidden"
             id="chat-file-upload"
           />
@@ -94,7 +97,7 @@ export default function ChatInput({ onSend, disabled = false, onUpload, showHome
           <button
             type="button"
             onClick={handleUploadClick}
-            disabled={disabled || isUploading}
+            disabled={isDisabled || isUploading}
             className="flex-shrink-0 p-2.5 text-zinc-400 hover:text-zinc-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="Upload file"
           >
@@ -108,9 +111,9 @@ export default function ChatInput({ onSend, disabled = false, onUpload, showHome
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
+          disabled={isDisabled}
           className="flex-1 resize-none overflow-hidden bg-transparent text-[#f5f5f5] placeholder-zinc-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed py-2 px-1"
-          placeholder={disabled ? 'Sending...' : showHomeChips ? 'Type your message or choose one of the options below...' : 'Type your message here...'}
+          placeholder={wizardActive ? 'Exit wizard to resume chat' : disabled ? 'Sending...' : showHomeChips ? 'Type your message or choose one of the options below...' : 'Type your message here...'}
           rows={1}
           style={{
             minHeight: '44px',
@@ -122,9 +125,9 @@ export default function ChatInput({ onSend, disabled = false, onUpload, showHome
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={disabled || !hasContent}
+          disabled={isDisabled || !hasContent}
           className={`flex-shrink-0 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center ${
-            hasContent && !disabled
+            hasContent && !isDisabled
               ? 'bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-500/30'
               : 'text-zinc-400 hover:text-zinc-300'
           } disabled:opacity-50 disabled:cursor-not-allowed`}

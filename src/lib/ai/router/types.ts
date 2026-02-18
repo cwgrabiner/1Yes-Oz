@@ -101,4 +101,5 @@ export interface RouterOutput {
   retrievalQuery?: string;     // Query for domain content retrieval (optional)
   needsWebSearch?: boolean;    // Auto-trigger web search for current events questions
   activeTool?: string;         // Recommended tool to activate
+  wizardOffer?: string;        // toolName to offer as wizard (e.g. 'resumes')
 }

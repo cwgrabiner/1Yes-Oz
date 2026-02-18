@@ -247,6 +247,26 @@ export async function POST(request: NextRequest) {
     // Return activeTool so client can show "Interview prep active" or send as slots.activeToolName next time.
     const recommendedActiveTool = promptOutput.activeTool && !activeToolName ? promptOutput.activeTool : undefined;
 
+    // Inject wizard-aware guidance when a wizard button will appear below the response
+    let systemPrompt = promptOutput.systemPrompt;
+    if (promptOutput.wizardOffer === 'resumes') {
+      const wizardGuidance = `
+WIZARD AVAILABLE: The user is asking about resume help. A "Résumé Makeover" wizard button will appear below your message.
+
+Your response should:
+1. Briefly acknowledge their request (1 sentence)
+2. Explain two options: quick chat help OR the guided makeover tool
+3. Give permission to ignore the button if they just want quick help
+4. Keep it SHORT (2-3 sentences total)
+
+Use this response (copy it exactly):
+"I can help two ways: quick tweaks in chat, or a guided makeover that walks you through each section. The makeover is thorough and gives you a polished résumé ready to send. If you just want quick help, keep chatting. Otherwise, click below to start the makeover."
+
+The wizard button appears automatically — just mention it as described above.
+      `.trim();
+      systemPrompt = wizardGuidance + '\n\n' + systemPrompt;
+    }
+
     // Get API configuration from environment
     const apiKey = process.env.OPENAI_API_KEY;
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -265,7 +285,7 @@ export async function POST(request: NextRequest) {
     const openAIMessages = [
       {
         role: 'system',
-        content: promptOutput.systemPrompt,
+        content: systemPrompt,
       },
       ...trimmedMessages
         .filter((msg) => msg.role !== 'system')
@@ -358,6 +378,7 @@ export async function POST(request: NextRequest) {
       ...(conversationId && { conversationId }),
       state: promptOutput.nextState,
       ...(recommendedActiveTool && { activeTool: recommendedActiveTool }),
+      ...(promptOutput.wizardOffer && { wizardOffer: promptOutput.wizardOffer }),
       ...(process.env.NODE_ENV === 'development' && { telemetry: promptOutput.telemetry }),
     });
   } catch (error) {

@@ -7,6 +7,9 @@ import type { PromptContextSlots } from '@/lib/prompt/buildPrompt';
 import type { ToolResult } from '@/lib/tools/types';
 import { FileText, X } from 'lucide-react';
 import { appendMessage, normalizeMessages } from '@/lib/chat/history';
+import { hasWizard, getWizardDisplayName } from '@/lib/wizard/registry';
+import { WizardShell } from '@/components/wizard/WizardShell';
+import { WizardArtifact } from '@/components/wizard/WizardArtifact';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import HomeStarterChips from './HomeStarterChips';
@@ -53,6 +56,15 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
   const [loadErrorConversationId, setLoadErrorConversationId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [aiState, setAiState] = useState<RouterState | undefined>(undefined);
+  const [activeWizard, setActiveWizard] = useState<{
+    sessionId: string;
+    toolName: string;
+    displayName: string;
+    currentStep: number;
+    totalSteps: number;
+    step: { title: string; instruction: string; inputType: string; inputLabel: string; inputPlaceholder?: string };
+  } | null>(null);
+  const [wizardArtifact, setWizardArtifact] = useState<{ artifact: string; displayName: string } | null>(null);
   const attachedFilesRef = useRef<AttachedFile[]>([]);
   attachedFilesRef.current = attachedFiles;
 
@@ -60,6 +72,8 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
     setMessages([]);
     setConversationId(null);
     setActiveToolName(null);
+    setActiveWizard(null);
+    setWizardArtifact(null);
     setError(null);
     setAttachedFiles([]);
     setAiState(undefined);
@@ -109,6 +123,8 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
   const isStreaming = isLoading;
   const shouldShowHomeChips =
     !activeToolName &&
+    !activeWizard &&
+    !wizardArtifact &&
     !hasActiveToolFromMessages &&
     messages.length === 0 &&
     !isStreaming &&
@@ -186,8 +202,52 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
   );
 
   const handleToolLaunch = async (toolName: string) => {
+    if (hasWizard(toolName)) {
+      try {
+        let res = await fetch('/api/tools/wizard/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toolName })
+        });
+        let data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? 'Failed to start wizard');
+          return;
+        }
+        if (data.hasExistingSession) {
+          const displayNameForConfirm = getWizardDisplayName(toolName);
+          const shouldResume = window.confirm(
+            `You have a ${displayNameForConfirm} in progress (Step ${data.currentStep + 1} of ${data.totalSteps}).\n\nResume where you left off?`
+          );
+          if (!shouldResume) {
+            res = await fetch('/api/tools/wizard/start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ toolName, forceNew: true })
+            });
+            data = await res.json();
+            if (!res.ok) {
+              setError(data.error ?? 'Failed to start fresh');
+              return;
+            }
+          }
+        }
+        setActiveWizard({
+          sessionId: data.sessionId,
+          toolName,
+          displayName: getWizardDisplayName(toolName),
+          currentStep: data.currentStep,
+          totalSteps: data.totalSteps,
+          step: data.step
+        });
+      } catch (e) {
+        console.error('Wizard start failed:', e);
+        setError('Failed to start wizard');
+      }
+      return;
+    }
+
     setIsToolRunning(true);
-    
     try {
       const response = await fetch('/api/tools/execute', {
         method: 'POST',
@@ -331,6 +391,7 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
       const assistantMessage: Message = {
         role: 'assistant',
         content: rawContent,
+        ...(data.wizardOffer && { wizardOffer: data.wizardOffer }),
       };
 
       setMessages(appendMessage(updatedMessages, assistantMessage));
@@ -361,16 +422,48 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
           {/* Hero section: fixed positioning, centered in full viewport, top third */}
           <div className="flex-1 flex justify-center items-center px-4">
             <div className="flex w-full max-w-2xl flex-col items-center space-y-8">
-              {/* Hero message */}
-              <div className="text-center">
-                <h2 className="mb-3 text-3xl font-semibold text-[#f5f5f5]">
-                  How can I help with your career today?
-                </h2>
-                <p className="text-zinc-400">
-                  Ask me anything about career planning, job search, or professional development.
-                </p>
-              </div>
-              {/* Input centered below hero */}
+              {/* Hero message (hidden when wizard is active) */}
+              {!activeWizard && !wizardArtifact && (
+                <div className="text-center">
+                  <h2 className="mb-3 text-3xl font-semibold text-[#f5f5f5]">
+                    How can I help with your career today?
+                  </h2>
+                  <p className="text-zinc-400">
+                    Ask me anything about career planning, job search, or professional development.
+                  </p>
+                </div>
+              )}
+              {activeWizard && !wizardArtifact && (
+                <div className="w-full max-w-3xl">
+                  <WizardShell
+                    sessionId={activeWizard.sessionId}
+                    toolName={activeWizard.toolName}
+                    displayName={activeWizard.displayName}
+                    currentStep={activeWizard.currentStep}
+                    totalSteps={activeWizard.totalSteps}
+                    stepTitle={activeWizard.step.title}
+                    stepInstruction={activeWizard.step.instruction}
+                    inputType={activeWizard.step.inputType}
+                    inputLabel={activeWizard.step.inputLabel}
+                    inputPlaceholder={activeWizard.step.inputPlaceholder}
+                    onComplete={(artifact) => {
+                      setWizardArtifact({ artifact, displayName: activeWizard.displayName });
+                      setActiveWizard(null);
+                    }}
+                    onExit={() => setActiveWizard(null)}
+                  />
+                </div>
+              )}
+              {wizardArtifact && (
+                <div className="w-full max-w-3xl">
+                  <WizardArtifact
+                    artifact={wizardArtifact.artifact}
+                    displayName={wizardArtifact.displayName}
+                    onClose={() => setWizardArtifact(null)}
+                  />
+                </div>
+              )}
+              {/* Input centered below hero / wizard */}
               <div className="w-full max-w-3xl space-y-3">
                 <div className="input-wrapper">
                   <div className="mb-2">
@@ -399,7 +492,8 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
                   )}
                   <ChatInput
                     onSend={sendMessage}
-                    disabled={isLoading || isToolRunning}
+                    disabled={isLoading || isToolRunning || !!activeWizard || !!wizardArtifact}
+                    wizardActive={!!activeWizard || !!wizardArtifact}
                     showHomeChips={shouldShowHomeChips}
                     onUpload={handleFileUpload}
                   />
@@ -435,6 +529,36 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
           onToolLaunch={handleToolLaunch}
           onEntryPromptSelect={sendMessage}
         />
+        {activeWizard && !wizardArtifact && (
+          <div className="mx-auto w-full max-w-3xl px-4">
+            <WizardShell
+              sessionId={activeWizard.sessionId}
+              toolName={activeWizard.toolName}
+              displayName={activeWizard.displayName}
+              currentStep={activeWizard.currentStep}
+              totalSteps={activeWizard.totalSteps}
+              stepTitle={activeWizard.step.title}
+              stepInstruction={activeWizard.step.instruction}
+              inputType={activeWizard.step.inputType}
+              inputLabel={activeWizard.step.inputLabel}
+              inputPlaceholder={activeWizard.step.inputPlaceholder}
+              onComplete={(artifact) => {
+                setWizardArtifact({ artifact, displayName: activeWizard.displayName });
+                setActiveWizard(null);
+              }}
+              onExit={() => setActiveWizard(null)}
+            />
+          </div>
+        )}
+        {wizardArtifact && (
+          <div className="mx-auto w-full max-w-3xl px-4">
+            <WizardArtifact
+              artifact={wizardArtifact.artifact}
+              displayName={wizardArtifact.displayName}
+              onClose={() => setWizardArtifact(null)}
+            />
+          </div>
+        )}
         <div className="border-t border-[#2a2a2a] p-4">
           <div className="mx-auto max-w-3xl space-y-3">
             <div className="input-wrapper">
@@ -464,7 +588,8 @@ export default function ChatContainer({ slots, onSlotsChange, onToolLaunchRef, o
               )}
               <ChatInput
                 onSend={sendMessage}
-                disabled={isLoading || isToolRunning}
+                disabled={isLoading || isToolRunning || !!activeWizard || !!wizardArtifact}
+                wizardActive={!!activeWizard || !!wizardArtifact}
                 showHomeChips={shouldShowHomeChips}
                 onUpload={handleFileUpload}
               />

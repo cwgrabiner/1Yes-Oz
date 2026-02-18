@@ -21,6 +21,7 @@ interface GeneratePromptOutput {
   systemPrompt: string;
   nextState: RouterState;
   activeTool?: string;
+  wizardOffer?: string;
   telemetry: {
     posture: string;
     priority: string;
@@ -55,21 +56,23 @@ export async function generatePrompt(input: GeneratePromptInput): Promise<Genera
     turnCount
   });
 
-  const { nextState, moduleIds, retrievalQuery, activeTool: routerActiveTool } = routerOutput;
+  const { nextState, moduleIds, retrievalQuery, activeTool: routerActiveTool, wizardOffer } = routerOutput;
 
   // Use router-recommended tool when client didn't send one
   const effectiveActiveToolPrompt = activeToolPrompt ?? (routerActiveTool ? (loadToolPrompt(routerActiveTool) || getTool(routerActiveTool)?.systemPrompt || '') : undefined);
 
-  // 2. Retrieve domain context (NEW - Week 3)
+  // 2. Retrieve domain context (skip when tool module already has domain expertise)
   let retrievedChunk: string | undefined;
   let chunksRetrieved = 0;
 
-  if (retrievalQuery && nextState.domain !== 'general') {
+  const hasToolModule = moduleIds.some((id) => id.startsWith('tool_'));
+
+  if (retrievalQuery && nextState.domain !== 'general' && !hasToolModule) {
     const results = await retrieveContext(retrievalQuery, nextState.domain);
-    
+
     if (results.length > 0) {
       retrievedChunk = results
-        .map(r => r.content)
+        .map((r) => r.content)
         .join('\n\n---\n\n');
       chunksRetrieved = results.length;
     }
@@ -91,6 +94,7 @@ export async function generatePrompt(input: GeneratePromptInput): Promise<Genera
     systemPrompt: assembled.systemPrompt,
     nextState,
     ...(routerActiveTool && { activeTool: routerActiveTool }),
+    ...(wizardOffer && { wizardOffer }),
     telemetry: {
       posture: nextState.posture,
       priority: nextState.priority,

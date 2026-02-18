@@ -23,6 +23,14 @@ import { MODULE as friction_medium } from './friction_medium';
 import { MODULE as decision_philosophy } from './decision_philosophy';
 import { MODULE as pov_core } from './pov_core';
 import { MODULE as memory_proposal } from './memory_proposal';
+// Tool modules
+import { MODULE as tool_resumes } from './tools/tool_resumes';
+import { MODULE as tool_interview_prep } from './tools/tool_interview_prep';
+import { MODULE as tool_linkedin } from './tools/tool_linkedin';
+import { MODULE as tool_negotiations } from './tools/tool_negotiations';
+import { MODULE as tool_networking } from './tools/tool_networking';
+import { MODULE as tool_confidence } from './tools/tool_confidence';
+import { MODULE as tool_jobseeker_ops } from './tools/tool_jobseeker_ops';
 
 /**
  * Central registry - maps module ID to module object
@@ -45,6 +53,13 @@ export const MODULE_REGISTRY: Record<string, PromptModule> = {
   friction_medium,
   decision_philosophy,
   pov_core,
+  tool_resumes,
+  tool_interview_prep,
+  tool_linkedin,
+  tool_negotiations,
+  tool_networking,
+  tool_confidence,
+  tool_jobseeker_ops,
 };
 
 /**
