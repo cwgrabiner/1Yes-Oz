@@ -9,6 +9,7 @@ import type { PromptModule } from './types';
 import { MODULE as core_identity } from './core_identity';
 import { MODULE as boundaries } from './boundaries';
 import { MODULE as voice_baseline } from './voice_baseline';
+import { MODULE as melissa_authority } from './melissa_authority';
 import { MODULE as memory_behavior } from './memory_behavior';
 import { MODULE as posture_calm_expert } from './posture_calm_expert';
 import { MODULE as posture_coach } from './posture_coach';
@@ -39,6 +40,7 @@ export const MODULE_REGISTRY: Record<string, PromptModule> = {
   core_identity,
   boundaries,
   voice_baseline,
+  melissa_authority,
   memory_behavior,
   memory_proposal,
   posture_calm_expert,

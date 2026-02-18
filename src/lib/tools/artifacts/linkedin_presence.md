@@ -53,6 +53,20 @@ Help job seekers and professionals turn a vague, passive profile into a clear, c
 
 ---
 
+## How many skills does LinkedIn allow?
+
+LinkedIn allows up to **100 skills** on your profile (updated from 50 in 2024).
+
+**Best practice:**
+- Focus on 10-15 **core skills** most relevant to your target role
+- Mix hard skills (technical, tools, certifications) with strategic skills
+- Prioritize skills that appear in job descriptions you're targeting
+- Avoid listing every skill you've ever touched—focus on what matters now
+
+Quality beats quantity. A targeted list of 12 highly relevant skills outperforms 100 random ones.
+
+---
+
 ## Do / Don’t Table
 | ✅ Do | ❌ Don’t |
 |------|----------|

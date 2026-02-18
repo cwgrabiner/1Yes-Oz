@@ -1,7 +1,7 @@
 import { getModules } from '../personality/modules/registry';
 import type { PromptModule } from '../personality/modules/types';
 
-const TOKEN_BUDGET = 2000;
+const TOKEN_BUDGET = 2500;
 const AVG_CHARS_PER_TOKEN = 4; // Conservative estimate
 
 interface AssembleInput {
@@ -182,6 +182,13 @@ export function assemblePrompt(input: AssembleInput): AssembleOutput {
       !s.name.includes("web_search")
     )
     .map(s => s.name);
+
+  // DEBUG: Verify memory_proposal in assembled prompt
+  console.log('=== ASSEMBLER DEBUG ===');
+  console.log('Modules included:', modulesIncluded);
+  console.log('memory_proposal in modulesIncluded?', modulesIncluded.includes('memory_proposal'));
+  console.log('System prompt includes memory_proposal content?', systemPrompt.includes('MEMORY PROPOSAL'));
+  console.log('=======================');
   
   return {
     systemPrompt,
@@ -192,8 +199,8 @@ export function assemblePrompt(input: AssembleInput): AssembleOutput {
 }
 
 function validateInvariants(modules: PromptModule[]): void {
-  // Check: Must include core_identity, boundaries, voice_baseline
-  const required = ["core_identity", "boundaries", "voice_baseline"];
+  // Check: Must include core_identity, boundaries, voice_baseline, melissa_authority
+  const required = ["core_identity", "boundaries", "voice_baseline", "melissa_authority"];
   for (const req of required) {
     if (!modules.find(m => m.id === req)) {
       throw new Error(`INVARIANT VIOLATION: Missing required module: ${req}`);

@@ -58,6 +58,9 @@ export async function generatePrompt(input: GeneratePromptInput): Promise<Genera
 
   const { nextState, moduleIds, retrievalQuery, activeTool: routerActiveTool, wizardOffer } = routerOutput;
 
+  // Always include melissa_authority (invariant; router is protected, so we add here)
+  const moduleIdsToUse = moduleIds.includes('melissa_authority') ? moduleIds : [...moduleIds, 'melissa_authority'];
+
   // Use router-recommended tool when client didn't send one
   const effectiveActiveToolPrompt = activeToolPrompt ?? (routerActiveTool ? (loadToolPrompt(routerActiveTool) || getTool(routerActiveTool)?.systemPrompt || '') : undefined);
 
@@ -80,7 +83,7 @@ export async function generatePrompt(input: GeneratePromptInput): Promise<Genera
 
   // 3. Assemble system prompt
   const assembled = assemblePrompt({
-    moduleIds,
+    moduleIds: moduleIdsToUse,
     memorySummary,
     retrievedChunk, // Now actually populated with domain expertise
     toolsIndex,

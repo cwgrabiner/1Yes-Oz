@@ -243,6 +243,7 @@ function selectModules(state: RouterState, memorySummary?: string, userText?: st
   }
    // Memory proposal (ALWAYS - so AI can suggest new memories)
    modules.push("memory_proposal");
+   console.log('Router: memory_proposal added to modules');
   
    // POSTURE (exactly one)
    modules.push(`posture_${state.posture}`);
